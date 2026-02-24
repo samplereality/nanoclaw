@@ -433,7 +433,8 @@ async function runQuery(
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
         'mcp__nanoclaw__*',
-        'mcp__google-docs__*'
+        'mcp__google-docs__*',
+        'mcp__zotero__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -455,6 +456,16 @@ async function runQuery(
             args: ['-y', 'google-docs-mcp'],
             env: {
               SERVICE_ACCOUNT_PATH: '/home/node/.config/nanoclaw/google-service-account.json',
+            },
+          },
+        } : {}),
+        ...(sdkEnv.ZOTERO_API_KEY && sdkEnv.ZOTERO_USER_ID ? {
+          zotero: {
+            command: 'npx',
+            args: ['-y', 'mcp-zotero'],
+            env: {
+              ZOTERO_API_KEY: sdkEnv.ZOTERO_API_KEY,
+              ZOTERO_USER_ID: sdkEnv.ZOTERO_USER_ID,
             },
           },
         } : {}),

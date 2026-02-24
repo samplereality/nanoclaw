@@ -47,6 +47,16 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Zotero Library
+
+If Zotero is configured, you can search and browse the user's reference library:
+
+- `mcp__zotero__search_library` — Search by keyword
+- `mcp__zotero__get_collections` — List collections
+- `mcp__zotero__get_collection_items` — Items in a collection
+- `mcp__zotero__get_item_details` — Full details for an item
+- `mcp__zotero__get_recent` — Recently added papers
+
 ## Message Formatting
 
 NEVER use markdown. Only use WhatsApp/Telegram formatting:
