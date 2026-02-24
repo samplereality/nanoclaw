@@ -4,6 +4,7 @@
  */
 import { ChildProcess, exec, spawn } from 'child_process';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 import {
@@ -138,6 +139,16 @@ function buildVolumeMounts(
     containerPath: '/home/node/.claude',
     readonly: false,
   });
+
+  // Google service account key (read-only, optional)
+  const googleSaPath = path.join(os.homedir(), '.config', 'nanoclaw', 'google-service-account.json');
+  if (fs.existsSync(googleSaPath)) {
+    mounts.push({
+      hostPath: googleSaPath,
+      containerPath: '/home/node/.config/nanoclaw/google-service-account.json',
+      readonly: true,
+    });
+  }
 
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC

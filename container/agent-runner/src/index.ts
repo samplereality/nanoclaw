@@ -432,7 +432,8 @@ async function runQuery(
         'TeamCreate', 'TeamDelete', 'SendMessage',
         'TodoWrite', 'ToolSearch', 'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*'
+        'mcp__nanoclaw__*',
+        'mcp__google-docs__*'
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -448,6 +449,15 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...(fs.existsSync('/home/node/.config/nanoclaw/google-service-account.json') ? {
+          'google-docs': {
+            command: 'npx',
+            args: ['-y', 'google-docs-mcp'],
+            env: {
+              SERVICE_ACCOUNT_PATH: '/home/node/.config/nanoclaw/google-service-account.json',
+            },
+          },
+        } : {}),
       },
       hooks: {
         PreCompact: [{ hooks: [createPreCompactHook(containerInput.assistantName)] }],

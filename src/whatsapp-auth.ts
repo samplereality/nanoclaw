@@ -58,6 +58,7 @@ async function connectSocket(phoneNumber?: string, isReconnect = false): Promise
     logger.warn({ err }, 'Failed to fetch latest WA Web version, using default');
     return { version: undefined };
   });
+
   const sock = makeWASocket({
     version,
     auth: {
