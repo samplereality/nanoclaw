@@ -32,6 +32,10 @@ Single Node.js process that connects to WhatsApp, routes messages to Claude Agen
 | `/qodo-pr-resolver` | Fetch and fix Qodo PR review issues interactively or in batch |
 | `/get-qodo-rules` | Load org- and repo-level coding rules from Qodo before code tasks |
 
+## Troubleshooting
+
+When something breaks that isn't caused by local changes, **check the upstream repo first** before trying to diagnose and patch independently: https://github.com/qwibitai/nanoclaw. The fix may already exist upstream — pull it rather than reinventing it.
+
 ## Development
 
 Run commands directly—don't tell the user to run them.
