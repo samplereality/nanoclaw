@@ -150,6 +150,16 @@ function buildVolumeMounts(
     });
   }
 
+  // Google Docs MCP token persistence (writable so token can refresh)
+  const googleDocsMcpDir = path.join(os.homedir(), '.config', 'google-docs-mcp');
+  if (fs.existsSync(googleDocsMcpDir)) {
+    mounts.push({
+      hostPath: googleDocsMcpDir,
+      containerPath: '/home/node/.config/google-docs-mcp',
+      readonly: false,
+    });
+  }
+
   // Per-group IPC namespace: each group gets its own IPC directory
   // This prevents cross-group privilege escalation via IPC
   const groupIpcDir = resolveGroupIpcPath(group.folder);
@@ -194,7 +204,7 @@ function buildVolumeMounts(
  * Secrets are never written to disk or mounted as files.
  */
 function readSecrets(): Record<string, string> {
-  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ZOTERO_API_KEY', 'ZOTERO_USER_ID']);
+  return readEnvFile(['CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ZOTERO_API_KEY', 'ZOTERO_USER_ID', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET']);
 }
 
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {

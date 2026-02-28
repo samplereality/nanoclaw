@@ -47,6 +47,20 @@ When you learn something important:
 - Split files larger than 500 lines into folders
 - Keep an index in your memory for the files you create
 
+## Google Docs, Sheets & Drive (read-only)
+
+You have read-only access to the user's Google Docs, Sheets, and Drive. Use these tools — don't tell the user the integration isn't configured. You cannot create, edit, or delete files.
+
+Key tools (all prefixed `mcp__google-docs__`):
+- `searchDocuments` — Search for documents by name or content
+- `listDocuments` — List Google Docs in Drive
+- `listFolderContents` — Browse a folder (use folderId='root' for top-level)
+- `listSpreadsheets` — List spreadsheets in Drive
+- `readDocument` — Read a Google Doc (supports text, markdown, json formats)
+- `readSpreadsheet` — Read a Google Sheet range
+- `getDocumentInfo` / `getFolderInfo` — Get metadata
+- `listComments` / `getComment` — Read doc comments
+
 ## Zotero Library
 
 If Zotero is configured, you can search and browse the user's reference library:

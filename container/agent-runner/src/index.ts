@@ -450,12 +450,13 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
-        ...(fs.existsSync('/home/node/.config/nanoclaw/google-service-account.json') ? {
+        ...(sdkEnv.GOOGLE_CLIENT_ID && sdkEnv.GOOGLE_CLIENT_SECRET ? {
           'google-docs': {
             command: 'npx',
-            args: ['-y', 'google-docs-mcp'],
+            args: ['-y', '@a-bonus/google-docs-mcp'],
             env: {
-              SERVICE_ACCOUNT_PATH: '/home/node/.config/nanoclaw/google-service-account.json',
+              GOOGLE_CLIENT_ID: sdkEnv.GOOGLE_CLIENT_ID,
+              GOOGLE_CLIENT_SECRET: sdkEnv.GOOGLE_CLIENT_SECRET,
             },
           },
         } : {}),

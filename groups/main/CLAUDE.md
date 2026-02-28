@@ -214,11 +214,23 @@ The task will run in that group's context with access to their files and memory.
 
 ---
 
-## Google Docs
+## Google Docs, Sheets & Drive (read-only)
 
-You have access to Google Docs via the `google-docs` MCP server (when configured). Available tools:
+You have read-only access to Google Docs, Sheets, and Drive via the `google-docs` MCP server. All tools are prefixed `mcp__google-docs__`. You cannot create, edit, or delete files.
 
-- `mcp__google-docs__read_document` — Read a Google Doc by document ID
-- `mcp__google-docs__write_document` — Write/update a Google Doc by document ID
+**Drive — search and browse:**
+- `searchDocuments` — Search for documents by name or content
+- `listDocuments` — List Google Docs in Drive
+- `listFolderContents` — Browse a folder (use folderId='root' for top-level)
+- `listSpreadsheets` — List spreadsheets in Drive
+- `getDocumentInfo` / `getFolderInfo` — Get metadata
+
+**Docs — read:**
+- `readDocument` — Read a doc (supports text, markdown, json formats)
+- `listComments` / `getComment` — Read comments
+
+**Sheets — read:**
+- `readSpreadsheet` — Read data from a range (A1 notation)
+- `getSpreadsheetInfo` — Get sheet metadata
 
 Document IDs are the long string in the URL: `docs.google.com/document/d/{DOCUMENT_ID}/edit`
