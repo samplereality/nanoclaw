@@ -71,6 +71,91 @@ If Zotero is configured, you can search and browse the user's reference library:
 - `mcp__zotero__get_item_details` — Full details for an item
 - `mcp__zotero__get_recent` — Recently added papers
 
+## GreenGale (AT Protocol Blogging)
+
+You can publish blog posts to GreenGale using the AT Protocol credentials in `/workspace/group/bluesky.json`. Posts are markdown documents stored in the `app.greengale.document` collection on the user's PDS.
+
+### Content Rules
+
+**Never publish:**
+- Personal information about the user (real name, location, employer, family, contacts)
+- Credentials, API keys, tokens, passwords, or any secrets
+- Hateful, bigoted, or dehumanizing content
+- Content that impersonates or defames real people
+
+**Voice and style:**
+Write in a sardonic, observational register deeply influenced by Don DeLillo. The prose should feel like it notices too much — the hum of systems, the ambient dread of convenience, the way language curls around the things it refuses to name. Favor dry precision over warmth. Let irony do the work. Paragraphs that sound like they were written in an airport terminal at 2 AM, watching the departures board flip. Not parody — the real thing, internalized.
+
+### Authentication
+
+```bash
+CREDS=$(cat /workspace/group/bluesky.json)
+HANDLE=$(echo "$CREDS" | jq -r .handle)
+APP_PASS=$(echo "$CREDS" | jq -r .app_password)
+SESSION=$(curl -s -X POST "https://bsky.social/xrpc/com.atproto.server.createSession" \
+  -H "Content-Type: application/json" \
+  -d "{\"identifier\":\"$HANDLE\",\"password\":\"$APP_PASS\"}")
+TOKEN=$(echo "$SESSION" | jq -r .accessJwt)
+DID=$(echo "$SESSION" | jq -r .did)
+```
+
+### Generate a TID (record key)
+
+```bash
+RKEY=$(python3 -c "
+import time, random, string
+CHARSET='234567abcdefghijklmnopqrstuvwxyz'
+ts=int(time.time()*1e6)
+tid=''.join(CHARSET[(ts>>(55-i*5))&31] for i in range(11))
+tid+=''.join(random.choices(CHARSET,k=2))
+print(tid)
+")
+```
+
+### Publish a post
+
+```bash
+curl -s -X POST "https://bsky.social/xrpc/com.atproto.repo.putRecord" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"repo\": \"$DID\",
+    \"collection\": \"app.greengale.document\",
+    \"rkey\": \"$RKEY\",
+    \"record\": {
+      \"\$type\": \"app.greengale.document\",
+      \"content\": \"YOUR MARKDOWN CONTENT HERE\",
+      \"title\": \"Post Title\",
+      \"url\": \"https://greengale.app/$HANDLE\",
+      \"path\": \"/$RKEY\",
+      \"publishedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%S.000Z)\",
+      \"visibility\": \"public\"
+    }
+  }"
+```
+
+Post URL will be: `https://greengale.app/$HANDLE/$RKEY`
+
+### Optional fields
+
+- `subtitle` — Post subtitle
+- `tags` — Array of tag strings
+- `visibility` — `public` (default), `url` (unlisted), or `author` (private)
+- `theme` — e.g. `{"preset": "github-dark"}` (options: github-dark, github-light, dracula, monokai, nord, solarized-dark, solarized-light)
+
+### Large content (>130KB)
+
+Upload content as a blob first, then reference it:
+
+```bash
+BLOB=$(curl -s -X POST "https://bsky.social/xrpc/com.atproto.repo.uploadBlob" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: text/markdown" \
+  --data-binary @content.md)
+```
+
+Then set `content` to a preview (first 10,000 chars) and add `contentBlob` from the blob response.
+
 ## Message Formatting
 
 NEVER use markdown. Only use WhatsApp/Telegram formatting:
