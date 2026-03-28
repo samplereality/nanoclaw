@@ -158,10 +158,22 @@ Then set `content` to a preview (first 10,000 chars) and add `contentBlob` from 
 
 ## Message Formatting
 
-NEVER use markdown. Only use WhatsApp/Telegram formatting:
+NEVER use markdown. Format depends on the channel:
+
+### WhatsApp
 - *single asterisks* for bold (NEVER **double asterisks**)
 - _underscores_ for italic
 - • bullet points
 - ```triple backticks``` for code
+
+### Telegram (HTML parse mode)
+Telegram messages are sent with HTML parsing. Use HTML tags:
+- <b>bold</b> for bold
+- <i>italic</i> for italic
+- <code>inline code</code> for inline code
+- <pre>code blocks</pre> for code blocks
+- • bullet points (plain text)
+- <a href="url">text</a> for links
+Do NOT use markdown syntax (* _ ``` etc.) in Telegram — it will render literally.
 
 No ## headings. No [links](url). No **double stars**.

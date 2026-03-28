@@ -8,6 +8,8 @@ import {
   OnInboundMessage,
   RegisteredGroup,
 } from '../types.js';
+import { registerChannel, ChannelOpts } from './registry.js';
+import { readEnvFile } from '../env.js';
 
 export interface TelegramChannelOpts {
   onMessage: OnInboundMessage;
@@ -40,8 +42,8 @@ export class TelegramChannel implements Channel {
           : (ctx.chat as any).title || 'Unknown';
 
       ctx.reply(
-        `Chat ID: \`tg:${chatId}\`\nName: ${chatName}\nType: ${chatType}`,
-        { parse_mode: 'Markdown' },
+        `Chat ID: <code>tg:${chatId}</code>\nName: ${chatName}\nType: ${chatType}`,
+        { parse_mode: 'HTML' },
       );
     });
 
@@ -199,12 +201,15 @@ export class TelegramChannel implements Channel {
       // Telegram has a 4096 character limit per message — split if needed
       const MAX_LENGTH = 4096;
       if (text.length <= MAX_LENGTH) {
-        await this.bot.api.sendMessage(numericId, text);
+        await this.bot.api.sendMessage(numericId, text, {
+          parse_mode: 'HTML',
+        });
       } else {
         for (let i = 0; i < text.length; i += MAX_LENGTH) {
           await this.bot.api.sendMessage(
             numericId,
             text.slice(i, i + MAX_LENGTH),
+            { parse_mode: 'HTML' },
           );
         }
       }
@@ -240,3 +245,10 @@ export class TelegramChannel implements Channel {
     }
   }
 }
+
+registerChannel('telegram', (opts: ChannelOpts) => {
+  const envConfig = readEnvFile(['TELEGRAM_BOT_TOKEN']);
+  const token = process.env.TELEGRAM_BOT_TOKEN || envConfig.TELEGRAM_BOT_TOKEN || '';
+  if (!token) return null;
+  return new TelegramChannel(token, opts);
+});
