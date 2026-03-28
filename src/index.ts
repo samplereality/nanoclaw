@@ -62,6 +62,8 @@ import {
 import { startSchedulerLoop } from './task-scheduler.js';
 import { Channel, NewMessage, RegisteredGroup } from './types.js';
 import { logger } from './logger.js';
+import { startCredentialProxy } from './credential-proxy.js';
+import { CREDENTIAL_PROXY_PORT } from './config.js';
 
 // Re-export for backwards compatibility during refactor
 export { escapeXml, formatMessages } from './router.js';
@@ -533,6 +535,14 @@ function ensureContainerSystemRunning(): void {
 
 async function main(): Promise<void> {
   ensureContainerSystemRunning();
+
+  // Start credential proxy as fallback when OneCLI gateway is not available.
+  try {
+    await startCredentialProxy(CREDENTIAL_PROXY_PORT, '0.0.0.0');
+  } catch (err) {
+    logger.warn({ err }, 'Credential proxy failed to start (OneCLI may handle auth instead)');
+  }
+
   initDatabase();
   logger.info('Database initialized');
   loadState();

@@ -11,6 +11,7 @@ import {
   CONTAINER_IMAGE,
   CONTAINER_MAX_OUTPUT_SIZE,
   CONTAINER_TIMEOUT,
+  CREDENTIAL_PROXY_PORT,
   DATA_DIR,
   GROUPS_DIR,
   IDLE_TIMEOUT,
@@ -263,9 +264,11 @@ async function buildContainerArgs(
   if (onecliApplied) {
     logger.info({ containerName }, 'OneCLI gateway config applied');
   } else {
-    logger.warn(
-      { containerName },
-      'OneCLI gateway not reachable — container will have no credentials',
+    // Fall back to credential proxy when OneCLI is unavailable.
+    logger.info({ containerName }, 'OneCLI unavailable — using credential proxy');
+    args.push(
+      '-e', `ANTHROPIC_BASE_URL=http://host.docker.internal:${CREDENTIAL_PROXY_PORT}`,
+      '-e', 'CLAUDE_CODE_OAUTH_TOKEN=placeholder',
     );
   }
 
