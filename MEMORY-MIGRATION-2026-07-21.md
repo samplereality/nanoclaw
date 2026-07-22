@@ -57,5 +57,5 @@ New `frontend-engineer` memory tree: `memory/index.md` (Core Memory + Map) +
   auto-memory source cleared.
 - Host restarted, `2.1.53`, service active; `ncl tasks` available; recurring
   tasks intact.
-- **Outstanding:** live recall test — confirm via a message to ProfClaw (e.g.
-  "when's the Bluesky weekly report?" → Tuesday 8am ET).
+- **Live recall test: PASSED** (2026-07-21) — ProfClaw recalled migrated memory
+  correctly after respawn on the new image.
