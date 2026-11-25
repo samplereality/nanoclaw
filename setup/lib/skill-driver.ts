@@ -13,8 +13,9 @@
  * the URL offer, the prose-derived validation message.
  */
 import { execSync, spawn } from 'node:child_process';
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import * as p from '@clack/prompts';
 
@@ -37,6 +38,7 @@ import { emitStatus } from '../status.js';
 import { openUrl } from './browser.js';
 import { isHelpEscape, offerClaudeHandoff, validateWithHelpEscape } from './claude-handoff.js';
 import { startSpinner } from './runner.js';
+import { warnSetupCommit, withSetupCommit } from './setup-commit.js';
 
 /**
  * Build the clack `validate` callback an `nc:prompt` carries — the interactive
@@ -475,7 +477,7 @@ export function plainDuration(ms: number): string {
   return s >= 60 ? `(${Math.floor(s / 60)}m ${s % 60}s)` : `(${s}s)`;
 }
 
-/** Fork-aware registry-branch remote (same resolver setup/channels/slack.ts uses). */
+/** Fork-aware registry-branch remote (`resolve_channels_remote` in setup/lib/channels-remote.sh). */
 export function channelsRemote(projectRoot: string): () => string {
   return () =>
     execSync('source setup/lib/channels-remote.sh; resolve_channels_remote', {
@@ -487,6 +489,8 @@ export function channelsRemote(projectRoot: string): () => string {
 
 export interface RunSkillOptions {
   projectRoot?: string;
+  /** Refresh reapplies code/dependency directives before the normal install/validation pass. */
+  mode?: 'install' | 'refresh';
   /** Pre-supplied prompt answers — pass them all for a fully programmatic run. */
   inputs?: Record<string, string>;
   /**
@@ -567,15 +571,22 @@ export async function runSkill(skillDir: string, opts: RunSkillOptions = {}): Pr
     rawLog = setupLog.stepRawLog(`skill-${basename(skillDir)}`);
     writeFileSync(rawLog, `# skill ${basename(skillDir)} — ${new Date().toISOString()}\n\n`);
   }
-  return applySkill(skillDir, projectRoot, {
-    inputs,
-    resolveInput: opts.resolveInput ?? clackResolveInput({ channel: opts.channel, step: opts.step }),
-    onEvent: opts.onEvent ?? defaultOnEvent(md, confirm, open),
-    exec: opts.exec ?? hostExec(projectRoot, rawLog),
-    execStream: opts.execStream ?? hostExecStream(projectRoot),
-    resolveRemote: opts.resolveRemote ?? channelsRemote(projectRoot),
-    skipEffects: opts.skipEffects,
-  });
+  return withSetupCommit(
+    projectRoot,
+    basename(skillDir),
+    () =>
+      applySkill(skillDir, projectRoot, {
+        mode: opts.mode,
+        inputs,
+        resolveInput: opts.resolveInput ?? clackResolveInput({ channel: opts.channel, step: opts.step }),
+        onEvent: opts.onEvent ?? defaultOnEvent(md, confirm, open),
+        exec: opts.exec ?? hostExec(projectRoot, rawLog),
+        execStream: opts.execStream ?? hostExecStream(projectRoot),
+        resolveRemote: opts.resolveRemote ?? channelsRemote(projectRoot),
+        skipEffects: opts.skipEffects,
+      }),
+    warnSetupCommit,
+  );
 }
 
 /**
@@ -638,7 +649,11 @@ export function unknownInputKeys(skillDir: string, inputs: Record<string, string
 }
 
 // CLI: pnpm exec tsx setup/lib/skill-driver.ts <skillDir>   — apply a skill interactively.
-if (process.argv[1] && import.meta.url === `file://${process.argv[1]}`) {
+if (
+  process.argv[1] &&
+  existsSync(process.argv[1]) &&
+  import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+) {
   void (async () => {
     const usage = (msg: string): never => {
       console.error(`${msg}\nusage: skill-driver <skill-dir> [--input key=value]...`);

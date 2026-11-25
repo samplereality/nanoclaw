@@ -33,7 +33,7 @@ import { execSync } from 'node:child_process';
 
 const roots: string[] = [];
 const skill = path.join('.claude', 'skills', 'add-opencode');
-function root(seam = 1) {
+function root(seam = 1, credentialSeam = 1) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'opencode-setup-install-'));
   roots.push(root);
   fs.cpSync(path.join(process.cwd(), skill), path.join(root, skill), { recursive: true });
@@ -50,6 +50,11 @@ function root(seam = 1) {
   fs.writeFileSync(
     path.join(root, 'src/provider-contracts/registry.ts'),
     `export const PROVIDER_HOST_CONTRACT_SEAM_VERSION = ${seam};\n`,
+  );
+  fs.mkdirSync(path.join(root, 'setup/gateways'), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, 'setup/gateways/credential-store.ts'),
+    `export const PROVIDER_CREDENTIAL_CONNECTION_SEAM_VERSION = ${credentialSeam};\n`,
   );
   fs.writeFileSync(path.join(root, 'container/cli-tools.json'), '[]\n');
   fs.writeFileSync(path.join(root, 'container/agent-runner/package.json'), '{"dependencies":{}}\n');
@@ -77,6 +82,18 @@ afterEach(() => {
 });
 
 describe('OpenCode setup installation and refresh', () => {
+  it('refuses a core without credential connections before changing its payload or dependencies', async () => {
+    const directory = root(1, 0);
+    const before = tree(directory);
+    const result = await applyProviderSkill(skill, directory);
+    expect(result.blockers.length).toBeGreaterThan(0);
+    expect(tree(directory)).toEqual(before);
+    expect(fixture.commands).toHaveLength(1);
+  });
+  it('accepts a later credential-connection seam, which only adds optional fields', async () => {
+    const result = await applyProviderSkill(skill, root(1, 2));
+    expect(result.blockers).toEqual([]);
+  });
   it('does not count its compatibility predicate as a payload change on an installed provider', async () => {
     const directory = root();
     await applyProviderSkill(skill, directory);
@@ -92,17 +109,22 @@ describe('OpenCode setup installation and refresh', () => {
     expect(tree(directory)).toEqual(before);
     expect(fixture.commands).toHaveLength(2);
     expect(fixture.commands[0]).toMatch(/^node -e /);
-    expect(fixture.commands[1]).toBe('rm -f src/opencode-dockerfile.test.ts');
+    expect(fixture.commands[1]).toBe(
+      'rm -f src/opencode-dockerfile.test.ts container/agent-runner/src/providers/opencode.attachments.test.ts',
+    );
   });
 
-  it('keeps an installed Codex payload and pins without contacting its registry branch', async () => {
+  it('keeps an installed Codex payload and pins as they are', async () => {
     const directory = root();
     const codexSkill = '.claude/skills/add-codex';
     fs.cpSync(codexSkill, path.join(directory, codexSkill), { recursive: true });
     const directives = parseDirectives(fs.readFileSync(path.join(codexSkill, 'SKILL.md'), 'utf8'));
     for (const directive of directives) {
       if (directive.kind === 'copy') {
-        for (const file of directive.body) {
+        for (const mapping of directive.body) {
+          // Bundled provider hooks use SRC -> DST; the installed fixture must
+          // populate destinations, just like registry copies without mapping.
+          const file = (mapping.split('->')[1] ?? mapping).trim();
           fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
           fs.writeFileSync(path.join(directory, file), `// installed local customization: ${file}\n`);
         }
@@ -116,8 +138,24 @@ describe('OpenCode setup installation and refresh', () => {
     const result = await applyProviderSkill(codexSkill, directory);
     expect(result.blockers).toEqual([]);
     expect(result.changed).toBe(false);
-    expect(fixture.commands).toEqual([]);
+    expect(fixture.commands).toEqual([
+      `grep -qsF ./exchange-archive.js container/agent-runner/src/providers/codex.ts || grep -qsF providers/exchange-archive.js container/agent-runner/src/provider-contracts/codex.ts || rm -f container/agent-runner/src/providers/exchange-archive.ts container/agent-runner/src/providers/exchange-archive.test.ts`,
+    ]);
     expect(tree(directory)).toEqual(before);
+  });
+
+  // The setup process imported src/provider-contracts/index.ts before
+  // the install appended to it, so the caller needs the appended module's real
+  // path to import it directly. Nothing is reported for a payload that was
+  // already in the barrel: that one loaded with the barrel at startup.
+  it('reports the host contract module it appended to the contract barrel, once', async () => {
+    const directory = root();
+    const first = await applyProviderSkill(skill, directory);
+    expect(first.blockers).toEqual([]);
+    expect(first.hostContractModules).toEqual([path.join(directory, 'src/provider-contracts/opencode.ts')]);
+    expect(fs.existsSync(first.hostContractModules[0])).toBe(true);
+    const again = await applyProviderSkill(skill, directory);
+    expect(again.hostContractModules).toEqual([]);
   });
 
   it('uses the pinned Bun when the host has a different version', async () => {

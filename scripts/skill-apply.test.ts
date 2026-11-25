@@ -231,7 +231,7 @@ describe('apply engine lifecycle', () => {
   });
 
   it('plan marks the unknown step ↳agent and the prompt ? needs-input before any write', () => {
-    const { steps, agentSteps, needsInput } = planSkill(skillDir, root);
+    const { agentSteps, needsInput } = planSkill(skillDir, root);
     expect(agentSteps).toBe(1);
     expect(needsInput).toContain('token');
     expect(existsSync(join(root, 'src/sample.ts'))).toBe(false); // planning mutated nothing
@@ -420,6 +420,36 @@ describe('append at:<marker>', () => {
     await applySkill(askill, aroot, { resolveInput: headless({}), exec: () => {} });
     const lines = readFileSync(join(aroot, 'setup/index.ts'), 'utf8').split('\n').filter(Boolean);
     expect(lines[lines.length - 1]).toBe('// trailing line'); // at EOF, not before the marker
+  });
+
+  it.each([
+    ['at EOF', ''],
+    ['before a marker', ' at:nanoclaw:setup-steps'],
+  ])('adds each line a file lacks, %s, even when the first line is there', async (_where, at) => {
+    const one = "one: () => import('./one.js'),";
+    const two = "two: () => import('./two.js'),";
+    writeFileSync(
+      join(askill, 'SKILL.md'),
+      ['# grown block', `\`\`\`nc:append to:setup/index.ts${at}`, one, two, '```', ''].join('\n'),
+    );
+    // Installed before the block gained its second line.
+    writeFileSync(join(aroot, 'setup/index.ts'), MARKER_FILE.replace('  // <<<', `  ${one}\n  // <<<`));
+    const res = await applySkill(askill, aroot, { mode: 'refresh', exec: () => {} });
+    const lines = readFileSync(join(aroot, 'setup/index.ts'), 'utf8')
+      .split('\n')
+      .map((l) => l.trim());
+    expect([one, two].map((line) => lines.filter((l) => l === line).length)).toEqual([1, 1]);
+    expect(res.journal).toEqual([{ op: 'appended', path: 'setup/index.ts', line: two }]);
+  });
+
+  it('adds the whole block when its first line is absent, even a line the file already has', async () => {
+    writeFileSync(
+      join(askill, 'SKILL.md'),
+      ['# block', '```nc:append to:setup/index.ts', 'const extra = {', 'on: true,', '};', '```', ''].join('\n'),
+    );
+    // MARKER_FILE already closes its STEPS object with `};`.
+    await applySkill(askill, aroot, { exec: () => {} });
+    expect(readFileSync(join(aroot, 'setup/index.ts'), 'utf8').endsWith('const extra = {\non: true,\n};\n')).toBe(true);
   });
 });
 
@@ -613,6 +643,8 @@ describe('nc:run multi-field JSON capture + validate', () => {
     const res = await applySkill(mskill, mroot, { inputs: {}, exec: () => JSON.stringify({ id: 'not-a-number' }) });
     expect(res.agentTasks).toHaveLength(1); // bounce, not re-ask
     expect(res.agentTasks[0].kind).toBe('run');
+    expect(res.agentTasks[0].reason).toContain('captured app_id does not match');
+    expect(res.agentTasks[0].reason).not.toContain('not-a-number'); // remote text stays out of the bounce
     expect(res.vars.app_id).toBeUndefined(); // validate failed before binding
     // the downstream env-set then defers on the unresolved {{app_id}}
     expect(res.deferred.some((d) => /unresolved \{\{app_id\}\}/.test(d))).toBe(true);
@@ -630,6 +662,7 @@ describe('nc:run multi-field JSON capture + validate', () => {
     writeFileSync(join(mskill, 'SKILL.md'), MULTI_CAPTURE_SKILL);
     const res = await applySkill(mskill, mroot, { inputs: {}, exec: () => 'not json at all' });
     expect(res.agentTasks).toHaveLength(1);
+    expect(res.agentTasks[0].reason).not.toContain('not json'); // remote text stays out of the bounce
     expect(res.vars.application_id).toBeUndefined();
   });
 });
@@ -902,7 +935,63 @@ describe('nc:run effect:step (streaming, multi-field capture)', () => {
     const { sdir, rdir } = stepScratch();
     const res = await applySkill(sdir, rdir, { exec: () => {}, execStream: async () => ({ ok: false, fields: {} }) });
     expect(res.agentTasks).toHaveLength(1);
+    expect(res.agentTasks[0].reason).toMatch(/engine could not apply \(the step did not complete\)/);
     expect(res.vars.platform_id).toBeUndefined();
+  });
+
+  it("a failed step's own ERROR field becomes the bounce reason verbatim", async () => {
+    const { sdir, rdir } = stepScratch();
+    const res = await applySkill(sdir, rdir, {
+      exec: () => {},
+      execStream: async () => ({
+        ok: false,
+        fields: { STATUS: 'failed', ERROR: 'setup step failed: database x exists but its keys are missing' },
+      }),
+    });
+    expect(res.agentTasks).toHaveLength(1);
+    expect(res.agentTasks[0].reason).toBe('setup step failed: database x exists but its keys are missing');
+  });
+
+  it('does not run build and test after a failed step, but keeps them in the recovery tasks', async () => {
+    const sdir = mkdtempSync(join(tmpdir(), 'nc-step-skill-'));
+    const rdir = mkdtempSync(join(tmpdir(), 'nc-step-proj-'));
+    writeFileSync(
+      join(sdir, 'SKILL.md'),
+      [
+        '# gateway demo',
+        '',
+        '## Install',
+        '```nc:run effect:step',
+        'pnpm exec tsx install.ts',
+        '```',
+        '',
+        '## Validate',
+        '```nc:run effect:build',
+        'pnpm run build',
+        '```',
+        '',
+        '```nc:run effect:test',
+        'pnpm exec vitest run',
+        '```',
+        '',
+      ].join('\n'),
+    );
+    writeFileSync(join(rdir, 'package.json'), '{"name":"scratch"}');
+    const ran: string[] = [];
+    const res = await applySkill(sdir, rdir, {
+      exec: (cmd) => {
+        ran.push(cmd);
+      },
+      execStream: async () => ({ ok: false, fields: { STATUS: 'failed', ERROR: 'precondition failed' } }),
+    });
+    expect(ran).toEqual([]);
+    // The step's own reason comes first; build and test are not run, but stay
+    // in the recovery tasks so an agent validates after fixing the step.
+    expect(res.agentTasks.map((t) => [t.kind, t.reason])).toEqual([
+      ['run', 'precondition failed'],
+      ['run', 'skipped: an earlier step did not complete — run this from the prose after fixing it'],
+      ['run', 'skipped: an earlier step did not complete — run this from the prose after fixing it'],
+    ]);
   });
 });
 
@@ -982,6 +1071,45 @@ describe('run-health gate (a bounce blocks later side effects)', () => {
     expect(res.agentTasks).toHaveLength(3);
     const gated = res.agentTasks.filter((t) => /an earlier step did not complete/.test(t.reason));
     expect(gated).toHaveLength(2); // restart + step, both bounced by the gate
+  });
+
+  // A step's ERROR text is the step's own; one that happens to read like the
+  // engine's deferred-input marker is still a failure, not a missing answer.
+  it('a failed step whose ERROR mentions an unresolved {{var}} still latches the gate', async () => {
+    writeFileSync(
+      join(gskill, 'SKILL.md'),
+      [
+        '# step then restart demo',
+        '',
+        '## Pair the device',
+        '```nc:run effect:step',
+        'pnpm exec tsx setup/index.ts --step pair',
+        '```',
+        '',
+        '## Restart the service',
+        '```nc:run effect:restart',
+        'bash restart.sh',
+        '```',
+        '',
+      ].join('\n'),
+    );
+    const cmds: string[] = [];
+    const res = await applySkill(gskill, groot, {
+      inputs: {},
+      exec: (c: string) => {
+        cmds.push(c);
+      },
+      execStream: async () => ({
+        ok: false,
+        fields: { STATUS: 'failed', ERROR: 'nested skill left unresolved {{token}}' },
+      }),
+    });
+    expect(cmds).not.toContain('bash restart.sh');
+    expect(res.deferred).toEqual([]);
+    expect(res.agentTasks.map((t) => t.reason)).toEqual([
+      'nested skill left unresolved {{token}}',
+      'skipped: an earlier step did not complete — run this from the prose after fixing it',
+    ]);
   });
 
   // Once blocked, an operator block must not walk the human through steps the
