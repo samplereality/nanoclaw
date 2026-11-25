@@ -424,7 +424,9 @@ describe('delivery deadline', () => {
     expect(tick.done()).toBe(true);
     // Eight awaited by the tick plus eight in the background (CONCURRENCY each).
     expect(peak).toBe(16);
-  });
+    // Local: 17 SQLite sessions take ~3.3s alone on a Raspberry Pi 5 and exceed
+    // the 5s default under full-suite load.
+  }, 20_000);
 
   it.each([
     { where: 'the same session', afterGiveUp: false, sent: false },
